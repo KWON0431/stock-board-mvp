@@ -1,0 +1,12 @@
+{
+  "name": "stock-board-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "연관주 보드 - AI 기반 주식 연관관계 시각화 MVP",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
+  }
+}

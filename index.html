@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>연관주 보드 — 프리미엄 다크 캔버스</title>
+<style>
+  :root{
+    --bg:#08090b;
+    --grid: rgba(255,255,255,.045); --grid-strong: rgba(255,255,255,.09);
+    --panel: rgba(255,255,255,.045); --panel-border: rgba(255,255,255,.10);
+    --card-bg: rgba(255,255,255,.05); --card-border: rgba(255,255,255,.10);
+    --ink:#f2efe8; --ink-dim:#93938c; --ink-faint:#5f5f5a;
+    --gold:#c9a227;
+    --up:#e2726e; --down:#6f93e0;
+    --competitor:#d6524f; --partner:#4f9d6e; --supply:#5b8cd6; --other:#8b8b93;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+
+  #boardWrap{position:fixed;inset:0;overflow:auto;scrollbar-width:none;}
+  #boardWrap::-webkit-scrollbar{display:none;}
+  #board{position:relative;transform-origin:0 0;}
+  #boardInner{
+    position:relative;width:5200px;height:3400px;transform-origin:0 0;cursor:grab;
+    background-color:var(--bg);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      linear-gradient(var(--grid-strong) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px);
+    background-size:26px 26px, 26px 26px, 130px 130px, 130px 130px;
+  }
+  #boardInner.panning{cursor:grabbing;}
+  svg#lines{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+  svg#lines path{pointer-events:stroke;cursor:pointer;fill:none;}
+
+  /* ---------- glass HUD ---------- */
+  .hud{
+    position:fixed;top:16px;left:16px;z-index:40;
+    background:var(--panel);backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid var(--panel-border);border-radius:14px;padding:14px 15px;
+    max-width:238px;
+  }
+  .hud h2{margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:-.01em;}
+  .hud h2 b{color:var(--gold);font-weight:700;}
+  .hud p{margin:0 0 10px;font-size:11px;color:var(--ink-dim);line-height:1.55;}
+  .legend{display:flex;flex-direction:column;gap:5px;}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-dim);}
+  .swatch{width:14px;height:2px;border-radius:2px;flex:none;}
+  .hud .hint{margin-top:10px;font-size:10px;color:var(--ink-faint);border-top:1px solid var(--panel-border);padding-top:8px;line-height:1.65;}
+
+  .toolbar{position:fixed;top:16px;right:16px;z-index:40;display:flex;gap:8px;}
+  .toolbar button{
+    background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--panel-border);border-radius:10px;
+    padding:9px 13px;font-size:11.5px;font-family:var(--mono);color:var(--ink-dim);cursor:pointer;white-space:nowrap;
+  }
+  .toolbar button:hover{color:var(--ink);border-color:rgba(255,255,255,.22);}
+
+  #kpi{
+    position:fixed;top:60px;right:16px;z-index:40;
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);text-align:right;
+  }
+
+  .zoomctl{
+    position:fixed;bottom:26px;right:22px;z-index:40;
+    background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--panel-border);border-radius:12px;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .zoomctl button{width:38px;height:34px;border:none;background:transparent;color:var(--ink-dim);font-size:15px;cursor:pointer;}
+  .zoomctl button:hover{color:var(--ink);background:rgba(255,255,255,.06);}
+  .zoomctl .lvl{font-family:var(--mono);font-size:9.5px;color:var(--ink-faint);text-align:center;padding:4px 0;
+    border-top:1px solid var(--panel-border);border-bottom:1px solid var(--panel-border);}
+
+  .searchbar{
+    position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:40;
+    display:flex;gap:6px;align-items:center;
+    background:rgba(255,255,255,.045);backdrop-filter:blur(18px) saturate(150%);
+    border:1px solid rgba(255,255,255,.12);border-radius:999px;
+    padding:7px 7px 7px 18px;
+  }
+  .searchbar input{border:none;outline:none;background:transparent;font-size:14px;width:220px;font-family:var(--sans);color:var(--ink);}
+  .searchbar input::placeholder{color:var(--ink-faint);}
+  .searchbar button{
+    background:rgba(255,255,255,.08);color:var(--ink);border:1px solid rgba(255,255,255,.14);border-radius:999px;
+    padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);white-space:nowrap;
+    transition:background .15s,border-color .15s;
+  }
+  .searchbar button:hover{background:rgba(255,255,255,.14);border-color:rgba(201,162,39,.5);}
+  .searchbar button:disabled{opacity:.4;cursor:progress;}
+  .searchbar .status{
+    position:absolute;bottom:52px;left:50%;transform:translateX(-50%);
+    font-family:var(--mono);font-size:11px;color:var(--ink-dim);white-space:nowrap;
+  }
+  .searchbar .status.err{color:var(--up);}
+
+  .card{
+    position:absolute;width:224px;
+    background:var(--card-bg);backdrop-filter:blur(10px);
+    border:1px solid var(--card-border);border-radius:12px;
+    box-shadow:0 6px 22px rgba(0,0,0,.35);z-index:5;user-select:none;
+  }
+  .card.dragging{z-index:20;box-shadow:0 14px 34px rgba(0,0,0,.5);border-color:rgba(201,162,39,.4);cursor:grabbing;}
+  .card-header{display:flex;align-items:center;justify-content:space-between;padding:11px 11px 4px;cursor:grab;}
+  .card-header .name{font-size:13.5px;font-weight:700;letter-spacing:-.01em;}
+  .card-header .close{border:none;background:transparent;color:var(--ink-faint);font-size:13px;cursor:pointer;width:18px;height:18px;border-radius:50%;}
+  .card-header .close:hover{background:rgba(255,255,255,.1);color:var(--ink);}
+  .card-row{display:flex;align-items:center;justify-content:space-between;padding:0 11px 6px;gap:6px;}
+  .chg{font-family:var(--mono);font-size:12px;font-weight:700;}
+  .chg.up{color:var(--up);} .chg.down{color:var(--down);}
+  .ai-btn{
+    font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.03em;
+    border:1px solid rgba(201,162,39,.5);color:var(--gold);background:rgba(201,162,39,.08);border-radius:999px;
+    padding:3px 9px;cursor:pointer;
+  }
+  .ai-btn:hover{background:var(--gold);color:#1a1400;}
+  .ai-btn:disabled{opacity:.5;cursor:progress;}
+  .chart-wrap{padding:0 11px;}
+  .chart-cap{font-size:9px;color:var(--ink-faint);padding:2px 11px 0;letter-spacing:.02em;}
+  .news{margin:0;padding:6px 11px 12px;font-size:11.5px;color:var(--ink-dim);line-height:1.5;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .handle{
+    position:absolute;width:10px;height:10px;border-radius:50%;top:50%;transform:translateY(-50%);
+    background:var(--bg);border:2px solid var(--ink-faint);cursor:crosshair;opacity:0;transition:opacity .12s,border-color .12s;
+  }
+  .card:hover .handle{opacity:.9;}
+  .handle:hover{border-color:var(--gold);background:var(--gold);}
+  .handle.e{right:-6px;} .handle.w{left:-6px;}
+
+  .note{
+    position:absolute;width:190px;min-height:120px;
+    background:linear-gradient(180deg, rgba(201,162,39,.10), rgba(255,255,255,.03));
+    border:1px solid rgba(201,162,39,.28);border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:4;
+  }
+  .note-head{display:flex;align-items:center;justify-content:space-between;padding:8px 9px 4px;cursor:grab;}
+  .note-head .tag{font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--gold);}
+  .note-head .close{border:none;background:transparent;color:var(--ink-faint);font-size:12px;cursor:pointer;width:16px;height:16px;border-radius:50%;}
+  .note-head .close:hover{background:rgba(255,255,255,.1);color:var(--ink);}
+  .note-body{min-height:80px;padding:0 10px 10px;font-size:12.5px;color:var(--ink);line-height:1.55;outline:none;white-space:pre-wrap;word-break:break-word;}
+  .note-body:empty::before{content:attr(data-placeholder);color:var(--ink-faint);}
+
+  .picker{
+    position:fixed;z-index:60;background:#15161a;border:1px solid var(--panel-border);border-radius:10px;
+    box-shadow:0 10px 28px rgba(0,0,0,.5);padding:6px;display:flex;gap:4px;
+  }
+  .picker button{border:none;background:transparent;border-radius:7px;padding:6px 9px;cursor:pointer;
+    font-family:var(--sans);font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--ink);}
+  .picker button:hover{background:rgba(255,255,255,.08);}
+  .picker .dot{width:8px;height:8px;border-radius:50%;}
+
+  /* ---------- KPI / feedback float panels ---------- */
+  .floatpanel{
+    position:fixed;top:60px;right:16px;z-index:45;width:236px;display:none;
+    background:var(--panel);backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid var(--panel-border);border-radius:14px;padding:14px 15px;
+  }
+  .floatpanel.show{display:block;}
+  .floatpanel h3{margin:0 0 10px;font-size:13px;font-weight:700;}
+  .stat-row{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);padding:3px 0;}
+  .stat-row b{color:var(--ink);font-family:var(--mono);font-weight:700;}
+  .stat-top{margin-top:8px;font-size:11px;color:var(--ink-faint);line-height:1.6;}
+  .panel-note{margin:10px 0 0;font-size:10px;color:var(--ink-faint);line-height:1.5;border-top:1px solid var(--panel-border);padding-top:8px;}
+  #feedbackPanel textarea{
+    width:100%;min-height:74px;resize:vertical;background:rgba(255,255,255,.05);
+    border:1px solid var(--panel-border);border-radius:8px;color:var(--ink);font-family:var(--sans);
+    font-size:12px;padding:8px;outline:none;
+  }
+  #feedbackPanel textarea::placeholder{color:var(--ink-faint);}
+  .fb-stars{display:flex;gap:4px;margin:8px 0;}
+  .fb-stars button{
+    background:none;border:none;font-size:17px;color:var(--ink-faint);cursor:pointer;padding:0;line-height:1;
+  }
+  .fb-stars button.active{color:var(--gold);}
+  #fbSubmit{
+    width:100%;background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.4);color:var(--gold);
+    border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);
+  }
+  #fbSubmit:hover{background:var(--gold);color:#1a1400;}
+  .fb-status{margin:8px 0 0;font-size:11px;color:var(--ink-dim);min-height:14px;}
+</style>
+</head>
+<body>
+
+<div id="boardWrap">
+  <div id="board">
+    <div id="boardInner">
+      <svg id="lines"></svg>
+    </div>
+  </div>
+</div>
+
+<div class="hud">
+  <h2>연관주 보드 <b>· MVP</b></h2>
+  <p>종목을 검색해 카드를 올리고, 옆면 손잡이로 관계선을 직접 그어보세요. AI 버튼을 누르면 <b style="color:var(--ink)">위=경쟁사 · 오른쪽=협력사 · 왼쪽=공급망</b> 방향으로 3개씩 자동 확장됩니다.</p>
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background:var(--competitor)"></span>경쟁사 (위)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--partner)"></span>협력사 (오른쪽)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--supply)"></span>공급망 (왼쪽)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--other)"></span>기타 (직접 연결시)</div>
+  </div>
+  <div class="hint">마우스 휠 = 확대·축소 · 보드 드래그 = 이동<br>라인 클릭 시 삭제 · AI 버튼 반복 클릭 시 계속 확장</div>
+</div>
+
+<div class="toolbar">
+  <button id="addNote">＋ 메모</button>
+  <button id="statsBtn">📊 KPI</button>
+  <button id="feedbackBtn">💬 피드백</button>
+  <button id="resetBtn">보드 비우기</button>
+</div>
+
+<div class="floatpanel" id="statsPanel">
+  <h3>📊 실사용 KPI</h3>
+  <div class="stat-row"><span>총 방문</span><b id="stVisits">–</b></div>
+  <div class="stat-row"><span>총 검색</span><b id="stSearches">–</b></div>
+  <div class="stat-row"><span>AI 확장 클릭</span><b id="stExpands">–</b></div>
+  <div class="stat-row"><span>피드백 수</span><b id="stFeedback">–</b></div>
+  <div class="stat-top" id="stTop"></div>
+  <p class="panel-note">Vercel KV 연동 시 실시간으로 집계됩니다 (README 참고).</p>
+</div>
+
+<div class="floatpanel" id="feedbackPanel">
+  <h3>💬 피드백 남기기</h3>
+  <textarea id="fbText" placeholder="사용해보시니 어떠셨나요? 불편한 점이나 아이디어를 남겨주세요."></textarea>
+  <div class="fb-stars" id="fbStars">
+    <button data-v="1">★</button><button data-v="2">★</button><button data-v="3">★</button><button data-v="4">★</button><button data-v="5">★</button>
+  </div>
+  <button id="fbSubmit">제출</button>
+  <p class="fb-status" id="fbStatus"></p>
+</div>
+<div id="kpi">카드 <b id="cardCount">0</b> · 메모 <b id="noteCount">0</b></div>
+
+<div class="zoomctl">
+  <button id="zoomIn">＋</button>
+  <div class="lvl" id="zoomLvl">100%</div>
+  <button id="zoomOut">－</button>
+</div>
+
+<div class="searchbar">
+  <div class="status" id="status"></div>
+  <input id="q" type="text" placeholder="종목명을 검색해 카드 추가..." />
+  <button id="go">추가</button>
+</div>
+
+<script>
+const svgNS = "http://www.w3.org/2000/svg";
+const boardWrap = document.getElementById('boardWrap');
+const board = document.getElementById('board');
+const boardInner = document.getElementById('boardInner');
+const svg = document.getElementById('lines');
+const input = document.getElementById('q');
+const goBtn = document.getElementById('go');
+const statusEl = document.getElementById('status');
+const cardCountEl = document.getElementById('cardCount');
+const noteCountEl = document.getElementById('noteCount');
+const resetBtn = document.getElementById('resetBtn');
+const addNoteBtn = document.getElementById('addNote');
+const zoomInBtn = document.getElementById('zoomIn');
+const zoomOutBtn = document.getElementById('zoomOut');
+const zoomLvl = document.getElementById('zoomLvl');
+
+const BASE_W = 5200, BASE_H = 3400;
+svg.setAttribute('width', BASE_W);
+svg.setAttribute('height', BASE_H);
+
+const CARD_W = 224, CARD_H = 176;
+const RELATIONS = {
+  competitor: {label:'경쟁사', color:'#d6524f'},
+  partner:    {label:'협력사', color:'#4f9d6e'},
+  supply:     {label:'공급망', color:'#5b8cd6'},
+  other:      {label:'기타',   color:'#8b8b93'},
+};
+const MAIN_GAP = 300;
+const CROSS_GAP = { competitor:260, partner:200, supply:200 };
+const DIR_CONFIG = {
+  competitor: {axis:'y', sign:-1},
+  partner:    {axis:'x', sign:+1},
+  supply:     {axis:'x', sign:-1},
+};
+
+let cards = new Map();
+let notes = new Map();
+let edges = new Map();
+let zoom = 1;
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function setStatus(msg, isErr){ statusEl.textContent = msg||''; statusEl.classList.toggle('err', !!isErr); }
+
+/* ---------------- zoom / coordinates ---------------- */
+function boardPointFromClient(clientX, clientY){
+  const rect = boardInner.getBoundingClientRect();
+  return { x: (clientX - rect.left)/zoom, y: (clientY - rect.top)/zoom };
+}
+function applyZoom(newZoom, anchorClientX, anchorClientY){
+  newZoom = Math.min(2, Math.max(0.35, newZoom));
+  const wrapRect = boardWrap.getBoundingClientRect();
+  const ax = anchorClientX ?? (wrapRect.left + wrapRect.width/2);
+  const ay = anchorClientY ?? (wrapRect.top + wrapRect.height/2);
+  const basePt = boardPointFromClient(ax, ay);
+  zoom = newZoom;
+  boardInner.style.transform = `scale(${zoom})`;
+  board.style.width = (BASE_W*zoom)+'px';
+  board.style.height = (BASE_H*zoom)+'px';
+  boardWrap.scrollLeft = basePt.x*zoom - (ax - wrapRect.left);
+  boardWrap.scrollTop  = basePt.y*zoom - (ay - wrapRect.top);
+  zoomLvl.textContent = Math.round(zoom*100)+'%';
+}
+zoomInBtn.addEventListener('click', () => applyZoom(zoom+0.15));
+zoomOutBtn.addEventListener('click', () => applyZoom(zoom-0.15));
+boardWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  applyZoom(zoom - e.deltaY*0.0016, e.clientX, e.clientY);
+}, {passive:false});
+
+function centerOfViewportBase(){
+  const r = boardWrap.getBoundingClientRect();
+  return boardPointFromClient(r.left + r.width/2, r.top + r.height/2);
+}
+
+/* ---------------- board panning (drag empty space) ---------------- */
+boardInner.addEventListener('pointerdown', (e) => {
+  if(e.target !== boardInner) return;
+  boardInner.classList.add('panning');
+  const startX = e.clientX, startY = e.clientY;
+  const scrollX = boardWrap.scrollLeft, scrollY = boardWrap.scrollTop;
+  function move(ev){
+    boardWrap.scrollLeft = scrollX - (ev.clientX - startX);
+    boardWrap.scrollTop  = scrollY - (ev.clientY - startY);
+  }
+  function up(){
+    boardInner.classList.remove('panning');
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  }
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+});
+
+/* ---------------- generic element drag ---------------- */
+function makeDraggable(state, handleEl, onMove){
+  handleEl.addEventListener('pointerdown', (e) => {
+    if(e.target.closest('.close') || e.target.classList.contains('handle')) return;
+    if(e.target.closest('.note-body')) return;
+    e.preventDefault(); e.stopPropagation();
+    state.el.classList.add('dragging');
+    const startX = e.clientX, startY = e.clientY;
+    const origX = state.x, origY = state.y;
+    function move(ev){
+      state.x = origX + (ev.clientX-startX)/zoom;
+      state.y = origY + (ev.clientY-startY)/zoom;
+      state.el.style.left = state.x+'px';
+      state.el.style.top = state.y+'px';
+      if(onMove) onMove();
+    }
+    function up(){
+      state.el.classList.remove('dragging');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+}
+
+/* ---------------- sparkline chart ---------------- */
+function sparklineSVG(trend, isUp, gradId){
+  const w = 200, h = 46;
+  if(!Array.isArray(trend) || trend.length < 2){
+    return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"></svg>`;
+  }
+  const min = Math.min(...trend), max = Math.max(...trend);
+  const span = (max-min) || 1;
+  const pts = trend.map((v,i) => ({ x:(i/(trend.length-1))*w, y: h-6-((v-min)/span)*(h-12) }));
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for(let i=1;i<pts.length;i++){
+    const p0=pts[i-1], p1=pts[i];
+    const mx=(p0.x+p1.x)/2, my=(p0.y+p1.y)/2;
+    d += ` Q ${p0.x} ${p0.y} ${mx} ${my}`;
+  }
+  d += ` L ${pts[pts.length-1].x} ${pts[pts.length-1].y}`;
+  const areaD = d + ` L ${w} ${h} L 0 ${h} Z`;
+  const color = isUp ? 'var(--up)' : 'var(--down)';
+  return `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${areaD}" fill="url(#${gradId})" stroke="none"/>
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>`;
+}
+
+/* ---------------- stock cards ---------------- */
+function createCard(data, x, y){
+  const id = uid();
+  const isUp = (data.change||'').trim().startsWith('+');
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.id = id;
+  el.style.left = x+'px'; el.style.top = y+'px';
+  el.innerHTML = `
+    <div class="handle e"></div><div class="handle w"></div>
+    <div class="card-header">
+      <span class="name">${data.name}</span>
+      <button class="close" title="삭제">✕</button>
+    </div>
+    <div class="card-row">
+      <span class="chg ${isUp?'up':'down'}">${data.change||''}</span>
+      <button class="ai-btn">✨ AI 확장</button>
+    </div>
+    <div class="chart-wrap">${sparklineSVG(data.trend, isUp, 'g'+id)}</div>
+    <div class="chart-cap">AI 추정 추세</div>
+    <p class="news">${data.summary||''}</p>
+  `;
+  boardInner.appendChild(el);
+
+  const card = { id, name:data.name, change:data.change||'', summary:data.summary||'', trend:data.trend||[], x, y, el,
+                 dirWave:{competitor:0, partner:0, supply:0} };
+  cards.set(id, card);
+  cardCountEl.textContent = cards.size;
+
+  makeDraggable(card, el.querySelector('.card-header'), () => refreshEdgesForCard(id));
+  makeConnectable(card);
+  el.querySelector('.close').addEventListener('click', () => deleteCard(id));
+  el.querySelector('.ai-btn').addEventListener('click', (e) => expandWithAI(id, e.currentTarget));
+  return card;
+}
+function deleteCard(id){
+  const card = cards.get(id); if(!card) return;
+  card.el.remove(); cards.delete(id);
+  [...edges.values()].filter(ed => ed.a===id||ed.b===id).forEach(ed => deleteEdge(ed.id));
+  cardCountEl.textContent = cards.size;
+}
+function findCardByName(name){
+  const n = name.trim().toLowerCase();
+  for(const c of cards.values()) if(c.name.trim().toLowerCase()===n) return c;
+  return null;
+}
+
+/* ---------------- notes ---------------- */
+function createNote(x,y){
+  const id = uid();
+  const el = document.createElement('div');
+  el.className = 'note';
+  el.style.left = x+'px'; el.style.top = y+'px';
+  el.innerHTML = `
+    <div class="note-head"><span class="tag">MEMO</span><button class="close">✕</button></div>
+    <div class="note-body" contenteditable="true" data-placeholder="메모를 입력하세요..."></div>
+  `;
+  boardInner.appendChild(el);
+  const note = { id, x, y, el };
+  notes.set(id, note);
+  noteCountEl.textContent = notes.size;
+  makeDraggable(note, el.querySelector('.note-head'), null);
+  el.querySelector('.close').addEventListener('click', () => { el.remove(); notes.delete(id); noteCountEl.textContent = notes.size; });
+  return note;
+}
+addNoteBtn.addEventListener('click', () => {
+  const c = centerOfViewportBase();
+  createNote(c.x - 95 + (Math.random()*40-20), c.y - 60 + (Math.random()*40-20));
+});
+resetBtn.addEventListener('click', () => {
+  [...cards.keys()].forEach(deleteCard);
+  [...notes.values()].forEach(n => n.el.remove());
+  notes.clear(); noteCountEl.textContent = 0;
+});
+
+/* ---------------- connecting ---------------- */
+function makeConnectable(card){
+  card.el.querySelectorAll('.handle').forEach(handle => {
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const tempLine = document.createElementNS(svgNS,'path');
+      tempLine.setAttribute('stroke', 'rgba(255,255,255,.35)');
+      tempLine.setAttribute('stroke-width', '1.3');
+      tempLine.setAttribute('stroke-dasharray', '3 4');
+      svg.appendChild(tempLine);
+      function move(ev){
+        const start = cardCenter(card);
+        const p = boardPointFromClient(ev.clientX, ev.clientY);
+        tempLine.setAttribute('d', bezierPath(start.x,start.y,p.x,p.y));
+      }
+      function up(ev){
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        tempLine.remove();
+        const target = document.elementFromPoint(ev.clientX, ev.clientY);
+        const targetCardEl = target ? target.closest('.card') : null;
+        if(targetCardEl && targetCardEl.dataset.id !== card.id){
+          const targetId = targetCardEl.dataset.id;
+          if(!edgeExists(card.id, targetId)){
+            const edge = createEdge(card.id, targetId, 'other', 'solid');
+            showRelationPicker(ev.clientX, ev.clientY, edge.id);
+          }
+        }
+      }
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+  });
+}
+function showRelationPicker(clientX, clientY, edgeId){
+  const existing = document.querySelector('.picker'); if(existing) existing.remove();
+  const picker = document.createElement('div');
+  picker.className = 'picker';
+  picker.style.left = Math.min(clientX, window.innerWidth-220)+'px';
+  picker.style.top = Math.min(clientY, window.innerHeight-50)+'px';
+  Object.entries(RELATIONS).forEach(([key,r]) => {
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="dot" style="background:${r.color}"></span>${r.label}`;
+    btn.addEventListener('click', () => { setEdgeRelation(edgeId, key); picker.remove(); });
+    picker.appendChild(btn);
+  });
+  document.body.appendChild(picker);
+  setTimeout(() => {
+    document.addEventListener('click', function outside(e){
+      if(!picker.contains(e.target)){ picker.remove(); document.removeEventListener('click', outside); }
+    });
+  },0);
+}
+
+/* ---------------- edges (curved) ---------------- */
+function edgeExists(a,b){
+  for(const ed of edges.values()) if((ed.a===a&&ed.b===b)||(ed.a===b&&ed.b===a)) return true;
+  return false;
+}
+function cardCenter(card){ return { x: card.x+CARD_W/2, y: card.y+CARD_H/2 }; }
+function bezierPath(x1,y1,x2,y2){
+  const dx = (x2-x1)*0.5;
+  return `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+}
+function createEdge(a,b,relKey,style){
+  const id = uid();
+  const path = document.createElementNS(svgNS,'path');
+  path.setAttribute('stroke-width', '1.4');
+  path.setAttribute('opacity', '0.85');
+  if(style==='dashed') path.setAttribute('stroke-dasharray','5 5');
+  path.addEventListener('click', () => deleteEdge(id));
+  svg.appendChild(path);
+  const edge = { id, a, b, relKey, style, pathEl:path };
+  edges.set(id, edge);
+  applyEdgeColor(edge);
+  refreshEdge(edge);
+  return edge;
+}
+function applyEdgeColor(edge){ edge.pathEl.setAttribute('stroke', RELATIONS[edge.relKey].color); }
+function setEdgeRelation(edgeId, relKey){ const e=edges.get(edgeId); if(!e) return; e.relKey=relKey; applyEdgeColor(e); }
+function deleteEdge(id){ const e=edges.get(id); if(!e) return; e.pathEl.remove(); edges.delete(id); }
+function refreshEdge(edge){
+  const ca=cards.get(edge.a), cb=cards.get(edge.b); if(!ca||!cb) return;
+  const p1=cardCenter(ca), p2=cardCenter(cb);
+  edge.pathEl.setAttribute('d', bezierPath(p1.x,p1.y,p2.x,p2.y));
+}
+function refreshEdgesForCard(cardId){
+  for(const e of edges.values()) if(e.a===cardId||e.b===cardId) refreshEdge(e);
+}
+
+/* ---------------- KPI event tracking (fire-and-forget) ---------------- */
+function trackEvent(event, name){
+  fetch('/api/track', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ event, name })
+  }).catch(() => {});
+}
+
+/* ---------------- AI calls (via our own serverless API — key never exposed to the browser) ---------------- */
+async function callApi(path, name){
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json().catch(() => null);
+  if(!res.ok){
+    const msg = (data && (data.error || data.detail)) || ("요청 실패 (" + res.status + ")");
+    throw new Error(msg);
+  }
+  return data;
+}
+async function fetchStockInfo(name){
+  return await callApi('/api/stock-info', name);
+}
+async function fetchRelated(name){
+  return await callApi('/api/related', name);
+}
+
+/* ---------------- directional placement ---------------- */
+function placeDirectional(sourceCard, dirKey, items){
+  if(!items || !items.length) return;
+  const wave = sourceCard.dirWave[dirKey]++;
+  const cfg = DIR_CONFIG[dirKey];
+  const cross = CROSS_GAP[dirKey];
+  const mainOffset = (wave+1)*MAIN_GAP;
+  const n = items.length;
+  items.forEach((it,i) => {
+    let target = findCardByName(it.name);
+    if(!target){
+      const crossOffset = (i - (n-1)/2) * cross;
+      let x = sourceCard.x, y = sourceCard.y;
+      if(cfg.axis === 'y'){ y += cfg.sign*mainOffset; x += crossOffset; }
+      else { x += cfg.sign*mainOffset; y += crossOffset; }
+      target = createCard({name:it.name, change:it.change, summary:it.news, trend:it.trend}, x, y);
+    }
+    if(!edgeExists(sourceCard.id, target.id)) createEdge(sourceCard.id, target.id, dirKey, 'dashed');
+  });
+}
+
+/* ---------------- search flow ---------------- */
+async function handleSearch(name){
+  if(!name || !name.trim()) return;
+  name = name.trim();
+  const existing = findCardByName(name);
+  if(existing){ setStatus('"'+name+'" 카드가 이미 보드에 있어요.'); return; }
+  goBtn.disabled = true;
+  setStatus('"'+name+'" 정보를 찾는 중...');
+  try{
+    const info = await fetchStockInfo(name);
+    const c = centerOfViewportBase();
+    const jitter = () => (Math.random()*60-30);
+    createCard(info, c.x - CARD_W/2 + jitter(), c.y - CARD_H/2 + jitter());
+    setStatus('"'+info.name+'" 카드를 추가했습니다.');
+    input.value = '';
+    trackEvent('search', info.name);
+  }catch(err){
+    console.error(err);
+    setStatus('검색 실패: '+err.message, true);
+  }finally{
+    goBtn.disabled = false;
+  }
+}
+goBtn.addEventListener('click', () => handleSearch(input.value));
+input.addEventListener('keydown', e => { if(e.key==='Enter') handleSearch(input.value); });
+
+/* ---------------- AI expansion ---------------- */
+async function expandWithAI(cardId, btnEl){
+  const card = cards.get(cardId); if(!card) return;
+  btnEl.disabled = true;
+  const orig = btnEl.textContent;
+  btnEl.textContent = '검색중...';
+  try{
+    const data = await fetchRelated(card.name);
+    placeDirectional(card, 'competitor', data.competitors || []);
+    placeDirectional(card, 'supply', data.supply || []);
+    placeDirectional(card, 'partner', data.partners || []);
+    const total = (data.competitors?.length||0) + (data.partners?.length||0) + (data.supply?.length||0);
+    setStatus(card.name+' 기준 '+total+'개 연관주를 확장했습니다.');
+    trackEvent('ai_expand', card.name);
+  }catch(err){
+    console.error(err);
+    setStatus('AI 확장 실패: '+err.message, true);
+  }finally{
+    btnEl.disabled = false; btnEl.textContent = orig;
+  }
+}
+
+/* ---------------- KPI dashboard & feedback panel ---------------- */
+const statsBtn = document.getElementById('statsBtn');
+const feedbackBtn = document.getElementById('feedbackBtn');
+const statsPanel = document.getElementById('statsPanel');
+const feedbackPanel = document.getElementById('feedbackPanel');
+
+function closeFloatPanels(){
+  statsPanel.classList.remove('show');
+  feedbackPanel.classList.remove('show');
+}
+statsBtn.addEventListener('click', async () => {
+  const willShow = !statsPanel.classList.contains('show');
+  closeFloatPanels();
+  if(willShow){ statsPanel.classList.add('show'); await loadStats(); }
+});
+feedbackBtn.addEventListener('click', () => {
+  const willShow = !feedbackPanel.classList.contains('show');
+  closeFloatPanels();
+  if(willShow) feedbackPanel.classList.add('show');
+});
+
+async function loadStats(){
+  const ids = ['stVisits','stSearches','stExpands','stFeedback'];
+  ids.forEach(id => document.getElementById(id).textContent = '...');
+  try{
+    const res = await fetch('/api/stats');
+    const d = await res.json();
+    document.getElementById('stVisits').textContent = d.visits ?? 0;
+    document.getElementById('stSearches').textContent = d.searches ?? 0;
+    document.getElementById('stExpands').textContent = d.expands ?? 0;
+    document.getElementById('stFeedback').textContent = d.feedbackCount ?? 0;
+    const topEl = document.getElementById('stTop');
+    topEl.textContent = (d.top && d.top.length) ? ('인기 검색: ' + d.top.join(' · ')) : (d.note || '');
+  }catch(err){
+    ids.forEach(id => document.getElementById(id).textContent = '0');
+  }
+}
+
+let selectedRating = 0;
+document.querySelectorAll('#fbStars button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedRating = parseInt(btn.dataset.v, 10);
+    document.querySelectorAll('#fbStars button').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.v,10) <= selectedRating);
+    });
+  });
+});
+document.getElementById('fbSubmit').addEventListener('click', async () => {
+  const textEl = document.getElementById('fbText');
+  const statusEl2 = document.getElementById('fbStatus');
+  const text = textEl.value.trim();
+  if(!text){ statusEl2.textContent = '내용을 입력해주세요.'; return; }
+  statusEl2.textContent = '전송 중...';
+  try{
+    await fetch('/api/feedback', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, rating: selectedRating || null })
+    });
+    statusEl2.textContent = '감사합니다! 피드백이 저장되었습니다.';
+    textEl.value = '';
+  }catch(err){
+    statusEl2.textContent = '전송 실패, 잠시 후 다시 시도해주세요.';
+  }
+});
+
+/* ---------------- init ---------------- */
+(function init(){
+  boardWrap.scrollLeft = (BASE_W - boardWrap.clientWidth)/2;
+  boardWrap.scrollTop = (BASE_H - boardWrap.clientHeight)/2 - 60;
+  trackEvent('visit');
+  handleSearch('대한항공');
+})();
+</script>
+</body>
+</html>
