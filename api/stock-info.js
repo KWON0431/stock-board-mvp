@@ -24,21 +24,21 @@ export default async function handler(req, res) {
 {"name":"정식 종목명(짧게)","change":"+1.2% 또는 -0.8% 형태의 추정 등락률","summary":"현재 이슈를 한 문장(24자 내외)으로, 원문 인용 금지","trend":[최근 추세를 나타내는 8개의 숫자 배열, 임의 스케일 0~100, 오래된순 → 최신순]}`;
 
   try {
-  // 1. 모델명을 정식 명칭으로 변경 (gemini-1.5-flash 또는 gemini-2.0-flash)
-  const model = 'gemini-1.5-flash'; 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-  
-  const apiRes = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: `종목: ${name}` }] }],
-      systemInstruction: { parts: [{ text: system }] },
-      // 2. google_search -> googleSearch 로 변경
-      tools: [{ googleSearch: {} }], 
-      generationConfig: { temperature: 1.0 },
-    }),
-  });
+    const model = 'gemini-3.6-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const apiRes = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `종목: ${name}` }] }],
+        systemInstruction: { parts: [{ text: system }] },
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 1.0 },
+      }),
+    });
 
     if (!apiRes.ok) {
       const detail = await apiRes.text();

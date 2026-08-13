@@ -1,5 +1,7 @@
 // /api/related.js
 // Vercel Serverless Function — 경쟁사/협력사/공급망 연관주를 각 3개씩 조사해 반환합니다.
+// Google Gemini API (무료 티어)를 사용합니다. GEMINI_API_KEY는 Vercel 프로젝트의 환경 변수로 설정하세요.
+// 무료 키 발급: https://aistudio.google.com/apikey (신용카드 불필요)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -28,22 +30,19 @@ export default async function handler(req, res) {
  "supply":[...동일 형식 3개...]}`;
 
   try {
-    const model = 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    
+    const model = 'gemini-3.6-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const apiRes = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
+      },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: `종목: ${name}` }] }],
         systemInstruction: { parts: [{ text: system }] },
-        // 1. google_search -> googleSearch 로 카멜케이스 수정
-        tools: [{ googleSearch: {} }], 
-        generationConfig: { 
-          temperature: 1.0,
-          // 2. 완벽한 JSON 응답을 보장받기 위한 포맷 지정
-          responseMimeType: "application/json" 
-        },
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 1.0 },
       }),
     });
 
