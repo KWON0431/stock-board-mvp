@@ -180,6 +180,11 @@
   }
   #fbSubmit:hover{background:var(--gold);color:#1a1400;}
   .fb-status{margin:8px 0 0;font-size:11px;color:var(--ink-dim);min-height:14px;}
+
+  #emptyHint{
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;
+    font-size:13px;color:var(--ink-faint);letter-spacing:.01em;pointer-events:none;
+  }
 </style>
 </head>
 <body>
@@ -244,6 +249,8 @@
   <button id="go">추가</button>
 </div>
 
+<div id="emptyHint">종목을 검색해서 첫 카드를 추가해보세요</div>
+
 <script>
 const svgNS = "http://www.w3.org/2000/svg";
 const boardWrap = document.getElementById('boardWrap');
@@ -286,6 +293,10 @@ let edges = new Map();
 let zoom = 1;
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
+function updateEmptyHint(){
+  const hint = document.getElementById('emptyHint');
+  if(hint) hint.style.display = cards.size ? 'none' : '';
+}
 function setStatus(msg, isErr){ statusEl.textContent = msg||''; statusEl.classList.toggle('err', !!isErr); }
 
 /* ---------------- zoom / coordinates ---------------- */
@@ -421,6 +432,7 @@ function createCard(data, x, y){
                  dirWave:{competitor:0, partner:0, supply:0} };
   cards.set(id, card);
   cardCountEl.textContent = cards.size;
+  updateEmptyHint();
 
   makeDraggable(card, el.querySelector('.card-header'), () => refreshEdgesForCard(id));
   makeConnectable(card);
@@ -433,6 +445,7 @@ function deleteCard(id){
   card.el.remove(); cards.delete(id);
   [...edges.values()].filter(ed => ed.a===id||ed.b===id).forEach(ed => deleteEdge(ed.id));
   cardCountEl.textContent = cards.size;
+  updateEmptyHint();
 }
 function findCardByName(name){
   const n = name.trim().toLowerCase();
@@ -727,7 +740,6 @@ document.getElementById('fbSubmit').addEventListener('click', async () => {
   boardWrap.scrollLeft = (BASE_W - boardWrap.clientWidth)/2;
   boardWrap.scrollTop = (BASE_H - boardWrap.clientHeight)/2 - 60;
   trackEvent('visit');
-  handleSearch('대한항공');
 })();
 </script>
 </body>
