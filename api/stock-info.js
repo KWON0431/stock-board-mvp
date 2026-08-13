@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 {"name":"정식 종목명(짧게)","change":"+1.2% 또는 -0.8% 형태의 추정 등락률","summary":"현재 이슈를 한 문장(24자 내외)으로, 원문 인용 금지","trend":[최근 추세를 나타내는 8개의 숫자 배열, 임의 스케일 0~100, 오래된순 → 최신순]}`;
 
   try {
-    const model = 'gemini-2.5-flash';
+    const model = 'gemini-1.5-flash-latest';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
     const apiRes = await fetch(url, {
       method: 'POST',
