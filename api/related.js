@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { name } = req.body || {};
+  const { name, count, exclude } = req.body || {};
   if (!name || !String(name).trim()) {
     res.status(400).json({ error: '종목명(name)이 필요합니다.' });
     return;
@@ -52,6 +52,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  // 확장 개수: 기본 3개, "+2개 더보기" 요청 시 2개. 안전하게 1~5로 제한합니다.
+  const n = Math.min(Math.max(parseInt(count, 10) || 3, 1), 5);
+  const excludeList = Array.isArray(exclude)
+    ? exclude.map((v) => String(v).trim()).filter(Boolean).slice(0, 60)
+    : [];
+
   const system = `당신은 주식 연관주 리서치 도우미입니다. 입력 종목과 아래 세 가지 "관계 유형"으로만 실제로 연결된 종목을 웹 검색으로 조사해 찾아주세요.
 
 절대 금지: 같은 뉴스/이슈에 언급된다는 이유, 같은 테마·섹터로 묶인다는 이유만으로는 연결하지 마세요. 아래 세 유형 중 하나에 명확히 해당하는 "사실관계"가 있는 경우에만 연결하세요.
@@ -61,7 +67,7 @@ export default async function handler(req, res) {
 - equity (지분 관계): 입력 종목이 지분을 보유했거나, 입력 종목의 지분을 보유한 종목 (모회사/자회사/계열사 포함)
 - supply (납품 관계): 부품·원자재·설비 등을 실제로 납품하거나 공급받는 밸류체인 관계
 
-각 유형별로 정확히 3개씩 찾되, 위 정의에 명확히 부합하는 근거가 없다면 억지로 채우지 말고 해당 유형은 3개보다 적게 반환해도 됩니다.
+각 유형별로 정확히 ${n}개씩 찾되, 위 정의에 명확히 부합하는 근거가 없다면 억지로 채우지 말고 해당 유형은 ${n}개보다 적게(근거가 전혀 없다면 빈 배열로) 반환해도 됩니다.
 
 각 종목마다 "reason" 필드에 그 관계가 왜 성립하는지 근거를 한 문장(20자 내외)으로 쓰세요. 반드시 위 세 관계 유형 중 하나에 해당하는 구체적 사실을 담아야 하며 (예: "카메라 모듈 납품", "지분 12% 보유", "동일 시장 직접 경쟁"), 뉴스 요약·테마 언급·원문 인용은 금지합니다.
 
@@ -70,8 +76,12 @@ export default async function handler(req, res) {
  "equity":[...동일 형식...],
  "supply":[...동일 형식...]}`;
 
+  const excludeNote = excludeList.length
+    ? `\n다음 종목은 이미 보드에 있으니 결과에서 제외하고, 그 외의 새로운 종목만 찾아주세요: ${excludeList.join(', ')}`
+    : '';
+
   try {
-    const apiRes = await callGemini(system, `종목: ${name}`);
+    const apiRes = await callGemini(system, `종목: ${name}${excludeNote}`);
 
     if (apiRes.status === 429) {
       res.status(429).json({ error: '무료 API 사용량 한도에 도달했어요. 10~20초 후 다시 시도해주세요.' });
