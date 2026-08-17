@@ -1,19 +1,27 @@
 // /api/feedback.js
-// 사용자 피드백(1:1 질문 3개 답변)을 수집/조회합니다.
+// 사용자 피드백(1:1 질문 3개에 대한 답변)을 수집/조회합니다.
 import { kv } from '@vercel/kv';
+
+const QUESTIONS = {
+  accuracy: ['accurate', 'mixed', 'inaccurate'],       // AI 연관 관계 정확도
+  usefulness: ['helpful', 'neutral', 'not_helpful'],   // 카드/연결선 UI 유용성
+  retention: ['yes', 'maybe', 'no'],                   // 재사용 의향
+};
 
 export default async function handler(req, res) {
   if (req.method === 'POST') {
-    const { q1, q2, q3 } = req.body || {};
-    if (!q1 && !q2 && !q3) {
-      res.status(400).json({ error: '최소 한 개 이상의 답변을 입력해주세요.' });
-      return;
+    const body = req.body || {};
+    for (const [key, allowed] of Object.entries(QUESTIONS)) {
+      if (!allowed.includes(body[key])) {
+        res.status(400).json({ error: `"${key}" 질문에 유효한 답을 선택해주세요.` });
+        return;
+      }
     }
     try {
       await kv.rpush('feedback', JSON.stringify({
-        q1: String(q1 || '').trim().slice(0, 300),
-        q2: String(q2 || '').trim().slice(0, 300),
-        q3: String(q3 || '').trim().slice(0, 300),
+        accuracy: body.accuracy,
+        usefulness: body.usefulness,
+        retention: body.retention,
         ts: Date.now(),
       }));
       res.status(200).json({ ok: true });
