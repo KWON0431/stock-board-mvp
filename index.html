@@ -95,6 +95,18 @@
     font-family:var(--mono);font-size:11px;color:var(--ink-dim);white-space:nowrap;
   }
   .searchbar .status.err{color:var(--up);}
+  .searchbar .status.info{color:var(--gold);}
+
+  .card.skeleton{pointer-events:none;border-style:dashed;}
+  .card.skeleton .name{color:var(--ink-faint);}
+  .skeleton-bar{height:8px;margin:9px 11px 0;border-radius:4px;
+    background:linear-gradient(90deg, rgba(255,255,255,.05), rgba(255,255,255,.14), rgba(255,255,255,.05));
+    background-size:200% 100%;animation:sk-pulse 1.3s ease-in-out infinite;}
+  .skeleton-bar.w60{width:55%;}
+  .skeleton-chart{height:44px;margin:10px 11px 12px;border-radius:6px;
+    background:linear-gradient(90deg, rgba(255,255,255,.035), rgba(255,255,255,.09), rgba(255,255,255,.035));
+    background-size:200% 100%;animation:sk-pulse 1.3s ease-in-out infinite;}
+  @keyframes sk-pulse{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
 
   .card{
     position:absolute;width:224px;
@@ -215,11 +227,12 @@
     <div class="legend-item"><span class="swatch" style="background:var(--supply)"></span>납품 관계 (왼쪽)</div>
     <div class="legend-item"><span class="swatch" style="background:var(--other)"></span>기타 (직접 연결시)</div>
   </div>
-  <div class="hint">마우스 휠 = 확대·축소 · 보드 드래그 = 이동<br>라인 클릭 시 삭제 · AI 버튼 반복 클릭 시 계속 확장</div>
+  <div class="hint">마우스 휠 = 확대·축소 · 보드 드래그 = 이동<br>라인 클릭 시 삭제 · AI 확장 후 "+2개 더보기"로 추가 탐색 · 🧭 자동 정렬로 카드 정돈</div>
 </div>
 
 <div class="toolbar">
   <button id="addNote">＋ 메모</button>
+  <button id="autoArrangeBtn">🧭 자동 정렬</button>
   <button id="statsBtn">📊 KPI</button>
   <button id="feedbackBtn">💬 피드백</button>
   <button id="resetBtn">보드 비우기</button>
@@ -293,6 +306,7 @@ const cardCountEl = document.getElementById('cardCount');
 const noteCountEl = document.getElementById('noteCount');
 const resetBtn = document.getElementById('resetBtn');
 const addNoteBtn = document.getElementById('addNote');
+const autoArrangeBtn = document.getElementById('autoArrangeBtn');
 const zoomInBtn = document.getElementById('zoomIn');
 const zoomOutBtn = document.getElementById('zoomOut');
 const zoomLvl = document.getElementById('zoomLvl');
@@ -326,7 +340,11 @@ function updateEmptyHint(){
   const hint = document.getElementById('emptyHint');
   if(hint) hint.style.display = cards.size ? 'none' : '';
 }
-function setStatus(msg, isErr){ statusEl.textContent = msg||''; statusEl.classList.toggle('err', !!isErr); }
+function setStatus(msg, isErr, isInfo){
+  statusEl.textContent = msg||'';
+  statusEl.classList.toggle('err', !!isErr);
+  statusEl.classList.toggle('info', !!isInfo && !isErr);
+}
 
 /* ---------------- zoom / coordinates ---------------- */
 function boardPointFromClient(clientX, clientY){
@@ -433,6 +451,21 @@ function sparklineSVG(trend, isUp, gradId){
     </svg>`;
 }
 
+/* ---------------- skeleton (loading) cards ---------------- */
+function createSkeletonCard(x, y){
+  const el = document.createElement('div');
+  el.className = 'card skeleton';
+  el.style.left = x+'px'; el.style.top = y+'px';
+  el.innerHTML = `
+    <div class="card-header"><span class="name">불러오는 중…</span></div>
+    <div class="skeleton-bar"></div>
+    <div class="skeleton-bar w60"></div>
+    <div class="skeleton-chart"></div>
+  `;
+  boardInner.appendChild(el);
+  return el;
+}
+
 /* ---------------- stock cards ---------------- */
 function createCard(data, x, y){
   const id = uid();
@@ -459,7 +492,7 @@ function createCard(data, x, y){
   boardInner.appendChild(el);
 
   const card = { id, name:data.name, change:data.change||'', summary:data.summary||'', reason:data.reason||'', trend:data.trend||[], x, y, el,
-                 dirWave:{competitor:0, partner:0, supply:0} };
+                 expanded:false, dirWave:{competitor:0, partner:0, supply:0} };
   cards.set(id, card);
   cardCountEl.textContent = cards.size;
   updateEmptyHint();
@@ -510,6 +543,28 @@ resetBtn.addEventListener('click', () => {
   [...notes.values()].forEach(n => n.el.remove());
   notes.clear(); noteCountEl.textContent = 0;
 });
+
+/* ---------------- auto-arrange ---------------- */
+function autoArrangeCards(){
+  const list = [...cards.values()];
+  if(!list.length){ setStatus('정렬할 카드가 없어요.', false, true); return; }
+  const GAP_X = 280, GAP_Y = 230;
+  const cols = Math.max(1, Math.round(Math.sqrt(list.length)));
+  const rows = Math.ceil(list.length / cols);
+  const gridW = (cols-1)*GAP_X, gridH = (rows-1)*GAP_Y;
+  const originX = BASE_W/2 - gridW/2 - CARD_W/2;
+  const originY = BASE_H/2 - gridH/2 - CARD_H/2;
+  list.forEach((card, i) => {
+    const col = i % cols, row = Math.floor(i/cols);
+    card.x = originX + col*GAP_X;
+    card.y = originY + row*GAP_Y;
+    card.el.style.left = card.x+'px';
+    card.el.style.top = card.y+'px';
+    refreshEdgesForCard(card.id);
+  });
+  setStatus('카드를 자동 정렬했습니다.');
+}
+autoArrangeBtn.addEventListener('click', autoArrangeCards);
 
 /* ---------------- connecting ---------------- */
 function makeConnectable(card){
@@ -611,11 +666,11 @@ function trackEvent(event, name){
 }
 
 /* ---------------- AI calls (via our own serverless API — key never exposed to the browser) ---------------- */
-async function callApi(path, name){
+async function callApi(path, body){
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name })
+    body: JSON.stringify(body)
   });
   const data = await res.json().catch(() => null);
   if(!res.ok){
@@ -625,13 +680,30 @@ async function callApi(path, name){
   return data;
 }
 async function fetchStockInfo(name){
-  return await callApi('/api/stock-info', name);
+  return await callApi('/api/stock-info', { name });
 }
-async function fetchRelated(name){
-  return await callApi('/api/related', name);
+async function fetchRelated(name, count, exclude){
+  return await callApi('/api/related', { name, count, exclude });
 }
 
 /* ---------------- directional placement ---------------- */
+function createExpansionSkeletons(sourceCard, count){
+  const skeletons = [];
+  Object.keys(DIR_CONFIG).forEach(dirKey => {
+    const cfg = DIR_CONFIG[dirKey];
+    const cross = CROSS_GAP[dirKey];
+    const wave = sourceCard.dirWave[dirKey];
+    const mainOffset = (wave+1)*MAIN_GAP;
+    for(let i=0;i<count;i++){
+      const crossOffset = (i - (count-1)/2) * cross;
+      let x = sourceCard.x, y = sourceCard.y;
+      if(cfg.axis === 'y'){ y += cfg.sign*mainOffset; x += crossOffset; }
+      else { x += cfg.sign*mainOffset; y += crossOffset; }
+      skeletons.push(createSkeletonCard(x, y));
+    }
+  });
+  return skeletons;
+}
 function placeDirectional(sourceCard, dirKey, items){
   if(!items || !items.length) return;
   const wave = sourceCard.dirWave[dirKey]++;
@@ -660,17 +732,21 @@ async function handleSearch(name){
   if(existing){ setStatus('"'+name+'" 카드가 이미 보드에 있어요.'); return; }
   goBtn.disabled = true;
   setStatus('"'+name+'" 정보를 찾는 중...');
+  const c = centerOfViewportBase();
+  const jitter = () => (Math.random()*60-30);
+  const sx = c.x - CARD_W/2 + jitter(), sy = c.y - CARD_H/2 + jitter();
+  const skel = createSkeletonCard(sx, sy);
   try{
     const info = await fetchStockInfo(name);
-    const c = centerOfViewportBase();
-    const jitter = () => (Math.random()*60-30);
-    createCard(info, c.x - CARD_W/2 + jitter(), c.y - CARD_H/2 + jitter());
+    skel.remove();
+    createCard(info, sx, sy);
     setStatus('"'+info.name+'" 카드를 추가했습니다.');
     input.value = '';
     trackEvent('search', info.name);
   }catch(err){
+    skel.remove();
     console.error(err);
-    setStatus('검색 실패: '+err.message, true);
+    setStatus('"'+name+'"에 대한 정보를 찾지 못했어요. 정확한 종목명으로 다시 검색해보세요. ('+err.message+')', true);
   }finally{
     goBtn.disabled = false;
   }
@@ -681,22 +757,34 @@ input.addEventListener('keydown', e => { if(e.key==='Enter') handleSearch(input.
 /* ---------------- AI expansion ---------------- */
 async function expandWithAI(cardId, btnEl){
   const card = cards.get(cardId); if(!card) return;
+  const isMore = card.expanded;
+  const count = isMore ? 2 : 3;
   btnEl.disabled = true;
   const orig = btnEl.textContent;
   btnEl.textContent = '검색중...';
+  const skeletons = createExpansionSkeletons(card, count);
   try{
-    const data = await fetchRelated(card.name);
+    const excludeNames = [...cards.values()].map(c => c.name);
+    const data = await fetchRelated(card.name, count, excludeNames);
+    skeletons.forEach(s => s.remove());
     placeDirectional(card, 'competitor', data.competitors || []);
     placeDirectional(card, 'supply', data.supply || []);
     placeDirectional(card, 'partner', data.equity || []);
     const total = (data.competitors?.length||0) + (data.equity?.length||0) + (data.supply?.length||0);
-    setStatus(card.name+' 기준 '+total+'개 연관주를 확장했습니다.');
+    card.expanded = true;
+    if(total === 0){
+      setStatus(card.name+' 기준으로 새로 찾은 연관주가 없어요. 납품·지분·경쟁 관계로 확인되는 종목이 더 없는 것 같아요.', false, true);
+    } else {
+      setStatus(card.name+' 기준 '+total+'개 연관주를 '+(isMore?'추가로 ':'')+'확장했습니다.');
+    }
     trackEvent('ai_expand', card.name);
   }catch(err){
+    skeletons.forEach(s => s.remove());
     console.error(err);
     setStatus('AI 확장 실패: '+err.message, true);
   }finally{
-    btnEl.disabled = false; btnEl.textContent = orig;
+    btnEl.disabled = false;
+    btnEl.textContent = card.expanded ? '+2개 더보기' : orig;
   }
 }
 
