@@ -52,7 +52,7 @@
   .swatch{width:14px;height:2px;border-radius:2px;flex:none;}
   .hud .hint{margin-top:10px;font-size:10px;color:var(--ink-faint);border-top:1px solid var(--panel-border);padding-top:8px;line-height:1.65;}
 
-  .toolbar{position:fixed;top:16px;right:16px;z-index:40;display:flex;gap:8px;}
+  .toolbar{position:fixed;top:16px;right:16px;z-index:40;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:460px;}
   .toolbar button{
     background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--panel-border);border-radius:10px;
     padding:9px 13px;font-size:11.5px;font-family:var(--mono);color:var(--ink-dim);cursor:pointer;white-space:nowrap;
@@ -233,6 +233,9 @@
 <div class="toolbar">
   <button id="addNote">＋ 메모</button>
   <button id="autoArrangeBtn">🧭 자동 정렬</button>
+  <button id="saveBoardBtn">💾 저장</button>
+  <button id="shareBoardBtn">🔗 공유</button>
+  <button id="loadBoardBtn" disabled>📂 불러오기</button>
   <button id="statsBtn">📊 KPI</button>
   <button id="feedbackBtn">💬 피드백</button>
   <button id="resetBtn">보드 비우기</button>
@@ -244,8 +247,11 @@
   <div class="stat-row"><span>총 검색</span><b id="stSearches">–</b></div>
   <div class="stat-row"><span>AI 확장 클릭</span><b id="stExpands">–</b></div>
   <div class="stat-row"><span>피드백 수</span><b id="stFeedback">–</b></div>
+  <div class="stat-row"><span>보드 저장률</span><b id="stSaveRate">–</b></div>
+  <div class="stat-row"><span>공유 링크 생성률</span><b id="stShareRate">–</b></div>
+  <div class="stat-row"><span>재방문율 (6일)</span><b id="stReturnRate">–</b></div>
   <div class="stat-top" id="stTop"></div>
-  <p class="panel-note">Vercel KV 연동 시 실시간으로 집계됩니다 (README 참고).</p>
+  <p class="panel-note">Vercel KV 연동 시 실시간으로 집계됩니다 (README 참고). 저장률·공유율은 검색해본 사용자 중 비율, 재방문율은 최근 방문자 표본 기준입니다.</p>
 </div>
 
 <div class="floatpanel" id="feedbackPanel">
@@ -307,6 +313,9 @@ const noteCountEl = document.getElementById('noteCount');
 const resetBtn = document.getElementById('resetBtn');
 const addNoteBtn = document.getElementById('addNote');
 const autoArrangeBtn = document.getElementById('autoArrangeBtn');
+const saveBoardBtn = document.getElementById('saveBoardBtn');
+const shareBoardBtn = document.getElementById('shareBoardBtn');
+const loadBoardBtn = document.getElementById('loadBoardBtn');
 const zoomInBtn = document.getElementById('zoomIn');
 const zoomOutBtn = document.getElementById('zoomOut');
 const zoomLvl = document.getElementById('zoomLvl');
@@ -566,6 +575,111 @@ function autoArrangeCards(){
 }
 autoArrangeBtn.addEventListener('click', autoArrangeCards);
 
+/* ---------------- board save & share (persist full board state via /api/board) ---------------- */
+function serializeBoard(){
+  return {
+    cards: [...cards.values()].map(c => ({
+      name:c.name, change:c.change, summary:c.summary, reason:c.reason, trend:c.trend, x:c.x, y:c.y
+    })),
+    notes: [...notes.values()].map(n => ({
+      x:n.x, y:n.y, text: (n.el.querySelector('.note-body') || {}).innerText || ''
+    })),
+    edges: [...edges.values()].map(e => {
+      const ca = cards.get(e.a), cb = cards.get(e.b);
+      if(!ca || !cb) return null;
+      return { a:ca.name, b:cb.name, relKey:e.relKey, style:e.style };
+    }).filter(Boolean),
+  };
+}
+function loadBoardState(state){
+  if(!state) return;
+  [...cards.keys()].forEach(deleteCard);
+  [...notes.values()].forEach(n => n.el.remove());
+  notes.clear(); noteCountEl.textContent = 0;
+
+  (state.cards||[]).forEach(c => {
+    createCard({ name:c.name, change:c.change, summary:c.summary, reason:c.reason, trend:c.trend }, c.x, c.y);
+  });
+  (state.notes||[]).forEach(n => {
+    const note = createNote(n.x, n.y);
+    if(n.text) note.el.querySelector('.note-body').innerText = n.text;
+  });
+  (state.edges||[]).forEach(e => {
+    const a = findCardByName(e.a||''), b = findCardByName(e.b||'');
+    if(a && b && !edgeExists(a.id, b.id)) createEdge(a.id, b.id, e.relKey||'other', e.style||'solid');
+  });
+  updateEmptyHint();
+}
+async function persistBoard(){
+  const res = await fetch('/api/board', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ state: serializeBoard() })
+  });
+  const data = await res.json().catch(() => null);
+  if(!res.ok || !data || !data.id) throw new Error((data && data.error) || '저장 실패');
+  try{ localStorage.setItem('savedBoardId', data.id); }catch(e){}
+  updateLoadBtnState();
+  return data.id;
+}
+function updateLoadBtnState(){
+  let has = false;
+  try{ has = !!localStorage.getItem('savedBoardId'); }catch(e){}
+  loadBoardBtn.disabled = !has;
+  loadBoardBtn.title = has ? '마지막으로 저장한 보드를 다시 불러옵니다' : '저장된 보드가 아직 없어요';
+}
+async function fetchAndLoadBoard(id, successMsg){
+  setStatus('보드를 불러오는 중...');
+  try{
+    const res = await fetch('/api/board?id='+encodeURIComponent(id));
+    const data = await res.json().catch(() => null);
+    if(!res.ok || !data || !data.state) throw new Error((data && data.error) || '불러오기 실패');
+    loadBoardState(data.state);
+    setStatus(successMsg);
+  }catch(err){
+    console.error(err);
+    setStatus('보드 불러오기 실패: '+err.message, true);
+  }
+}
+saveBoardBtn.addEventListener('click', async () => {
+  if(!cards.size){ setStatus('저장할 카드가 없어요. 먼저 종목을 검색해보세요.', false, true); return; }
+  saveBoardBtn.disabled = true;
+  setStatus('보드를 저장하는 중...');
+  try{
+    await persistBoard();
+    setStatus('보드를 저장했습니다. "📂 불러오기"로 다시 열 수 있어요.');
+    trackEvent('save');
+  }catch(err){
+    console.error(err);
+    setStatus('저장 실패: '+err.message, true);
+  }finally{
+    saveBoardBtn.disabled = false;
+  }
+});
+shareBoardBtn.addEventListener('click', async () => {
+  if(!cards.size){ setStatus('공유할 카드가 없어요. 먼저 종목을 검색해보세요.', false, true); return; }
+  shareBoardBtn.disabled = true;
+  setStatus('공유 링크를 만드는 중...');
+  try{
+    const id = await persistBoard();
+    const url = location.origin + location.pathname + '?board=' + id;
+    let copied = false;
+    try{ await navigator.clipboard.writeText(url); copied = true; }catch(e){}
+    setStatus(copied ? '공유 링크가 클립보드에 복사되었습니다: '+url : '공유 링크: '+url);
+    trackEvent('share_link');
+  }catch(err){
+    console.error(err);
+    setStatus('공유 링크 생성 실패: '+err.message, true);
+  }finally{
+    shareBoardBtn.disabled = false;
+  }
+});
+loadBoardBtn.addEventListener('click', () => {
+  let id = null;
+  try{ id = localStorage.getItem('savedBoardId'); }catch(e){}
+  if(!id){ setStatus('저장된 보드가 없어요.', false, true); return; }
+  fetchAndLoadBoard(id, '저장된 보드를 불러왔습니다.');
+});
+
 /* ---------------- connecting ---------------- */
 function makeConnectable(card){
   card.el.querySelectorAll('.handle').forEach(handle => {
@@ -656,12 +770,24 @@ function refreshEdgesForCard(cardId){
   for(const e of edges.values()) if(e.a===cardId||e.b===cardId) refreshEdge(e);
 }
 
+/* ---------------- anonymous per-browser id (for save/share/return-rate KPIs) ---------------- */
+function getUid(){
+  try{
+    let uid = localStorage.getItem('boardUid');
+    if(!uid){
+      uid = (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2)+Date.now().toString(36)));
+      localStorage.setItem('boardUid', uid);
+    }
+    return uid;
+  }catch(e){ return null; } // 시크릿 모드 등 localStorage 차단 시 uid 없이 진행
+}
+
 /* ---------------- KPI event tracking (fire-and-forget) ---------------- */
 function trackEvent(event, name){
   fetch('/api/track', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ event, name })
+    body: JSON.stringify({ event, name, uid: getUid() })
   }).catch(() => {});
 }
 
@@ -810,15 +936,19 @@ feedbackBtn.addEventListener('click', () => {
 });
 
 async function loadStats(){
-  const ids = ['stVisits','stSearches','stExpands','stFeedback'];
+  const ids = ['stVisits','stSearches','stExpands','stFeedback','stSaveRate','stShareRate','stReturnRate'];
   ids.forEach(id => document.getElementById(id).textContent = '...');
   try{
     const res = await fetch('/api/stats');
     const d = await res.json();
+    const pct = (v) => (v === null || v === undefined) ? '–' : v+'%';
     document.getElementById('stVisits').textContent = d.visits ?? 0;
     document.getElementById('stSearches').textContent = d.searches ?? 0;
     document.getElementById('stExpands').textContent = d.expands ?? 0;
     document.getElementById('stFeedback').textContent = d.feedbackCount ?? 0;
+    document.getElementById('stSaveRate').textContent = pct(d.saveRate);
+    document.getElementById('stShareRate').textContent = pct(d.shareRate);
+    document.getElementById('stReturnRate').textContent = pct(d.returningRate);
     const topEl = document.getElementById('stTop');
     topEl.textContent = (d.top && d.top.length) ? ('인기 검색: ' + d.top.join(' · ')) : (d.note || '');
   }catch(err){
@@ -859,6 +989,9 @@ document.getElementById('fbSubmit').addEventListener('click', async () => {
   boardWrap.scrollLeft = (BASE_W - boardWrap.clientWidth)/2;
   boardWrap.scrollTop = (BASE_H - boardWrap.clientHeight)/2 - 60;
   trackEvent('visit');
+  updateLoadBtnState();
+  const boardId = new URLSearchParams(location.search).get('board');
+  if(boardId) fetchAndLoadBoard(boardId, '공유된 보드를 불러왔습니다.');
 })();
 </script>
 </body>
