@@ -1,18 +1,19 @@
 // /api/feedback.js
-// 사용자 피드백(텍스트 + 별점)을 수집/조회합니다.
+// 사용자 피드백(1:1 질문 3개 답변)을 수집/조회합니다.
 import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
   if (req.method === 'POST') {
-    const { text, rating } = req.body || {};
-    if (!text || !String(text).trim()) {
-      res.status(400).json({ error: '내용을 입력해주세요.' });
+    const { q1, q2, q3 } = req.body || {};
+    if (!q1 && !q2 && !q3) {
+      res.status(400).json({ error: '최소 한 개 이상의 답변을 입력해주세요.' });
       return;
     }
     try {
       await kv.rpush('feedback', JSON.stringify({
-        text: String(text).trim().slice(0, 500),
-        rating: rating || null,
+        q1: String(q1 || '').trim().slice(0, 300),
+        q2: String(q2 || '').trim().slice(0, 300),
+        q3: String(q3 || '').trim().slice(0, 300),
         ts: Date.now(),
       }));
       res.status(200).json({ ok: true });
