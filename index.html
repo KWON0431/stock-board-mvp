@@ -119,10 +119,13 @@
   .ai-btn:disabled{opacity:.5;cursor:progress;}
   .chart-wrap{padding:0 11px;}
   .chart-cap{font-size:9px;color:var(--ink-faint);padding:2px 11px 0;letter-spacing:.02em;}
-  .reason{margin:0;padding:4px 11px 2px;font-size:10px;color:var(--gold);line-height:1.3;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;}
-  .news{margin:0;padding:4px 11px 12px;font-size:11.5px;color:var(--ink-dim);line-height:1.5;
+  .news{margin:0;padding:6px 11px 12px;font-size:11.5px;color:var(--ink-dim);line-height:1.5;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .news:empty{display:none;}
+  .reason{margin:0;padding:0 11px 10px;font-size:10px;color:var(--ink-faint);line-height:1.4;
+    display:flex;align-items:flex-start;gap:4px;}
+  .reason:empty{display:none;}
+  .reason .tag{flex:none;color:var(--gold);}
   .handle{
     position:absolute;width:10px;height:10px;border-radius:50%;top:50%;transform:translateY(-50%);
     background:var(--bg);border:2px solid var(--ink-faint);cursor:crosshair;opacity:0;transition:opacity .12s,border-color .12s;
@@ -155,7 +158,7 @@
 
   /* ---------- KPI / feedback float panels ---------- */
   .floatpanel{
-    position:fixed;top:60px;right:16px;z-index:45;width:280px;display:none;
+    position:fixed;top:60px;right:16px;z-index:45;width:236px;display:none;
     background:var(--panel);backdrop-filter:blur(14px) saturate(140%);
     border:1px solid var(--panel-border);border-radius:14px;padding:14px 15px;
   }
@@ -165,19 +168,24 @@
   .stat-row b{color:var(--ink);font-family:var(--mono);font-weight:700;}
   .stat-top{margin-top:8px;font-size:11px;color:var(--ink-faint);line-height:1.6;}
   .panel-note{margin:10px 0 0;font-size:10px;color:var(--ink-faint);line-height:1.5;border-top:1px solid var(--panel-border);padding-top:8px;}
-
-  /* 1:1 QA Feedback style */
-  .qa-group{margin-bottom:10px;}
-  .qa-label{display:block;font-size:11px;font-weight:600;color:var(--ink-dim);margin-bottom:4px;}
-  .qa-group input{
-    width:100%;background:rgba(255,255,255,.05);
+  #feedbackPanel textarea{
+    width:100%;min-height:74px;resize:vertical;background:rgba(255,255,255,.05);
     border:1px solid var(--panel-border);border-radius:8px;color:var(--ink);font-family:var(--sans);
-    font-size:11.5px;padding:6px 8px;outline:none;
+    font-size:12px;padding:8px;outline:none;
   }
-  .qa-group input::placeholder{color:var(--ink-faint);}
+  #feedbackPanel textarea::placeholder{color:var(--ink-faint);}
+  .fb-q{margin:0 0 12px;}
+  .fb-qtext{margin:0 0 6px;font-size:11.5px;color:var(--ink);line-height:1.4;}
+  .fb-opts{display:flex;gap:5px;flex-wrap:wrap;}
+  .fb-opts button{
+    background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:999px;
+    padding:5px 10px;font-size:11px;color:var(--ink-dim);cursor:pointer;font-family:var(--sans);
+  }
+  .fb-opts button:hover{border-color:rgba(201,162,39,.4);color:var(--ink);}
+  .fb-opts button.active{background:rgba(201,162,39,.16);border-color:rgba(201,162,39,.55);color:var(--gold);}
   #fbSubmit{
     width:100%;background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.4);color:var(--gold);
-    border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-top:4px;
+    border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);
   }
   #fbSubmit:hover{background:var(--gold);color:#1a1400;}
   .fb-status{margin:8px 0 0;font-size:11px;color:var(--ink-dim);min-height:14px;}
@@ -200,9 +208,9 @@
 
 <div class="hud">
   <h2>연관주 보드 <b>· MVP</b></h2>
-  <p>종목을 검색해 카드를 올리고, 옆면 손잡이로 관계선을 직접 그어보세요. AI 버튼을 누르면 <b style="color:var(--ink)">위=경쟁사 · 오른쪽=지분 관계 · 왼쪽=납품 관계</b> 방향으로 3개씩 자동 확장됩니다.</p>
+  <p>종목을 검색해 카드를 올리고, 옆면 손잡이로 관계선을 직접 그어보세요. AI 버튼을 누르면 <b style="color:var(--ink)">위=경쟁 관계 · 오른쪽=지분 관계 · 왼쪽=납품 관계</b> 방향으로 3개씩 자동 확장됩니다. 뉴스·테마로만 엮인 종목은 연결하지 않아요.</p>
   <div class="legend">
-    <div class="legend-item"><span class="swatch" style="background:var(--competitor)"></span>경쟁사 (위)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--competitor)"></span>경쟁 관계 (위)</div>
     <div class="legend-item"><span class="swatch" style="background:var(--partner)"></span>지분 관계 (오른쪽)</div>
     <div class="legend-item"><span class="swatch" style="background:var(--supply)"></span>납품 관계 (왼쪽)</div>
     <div class="legend-item"><span class="swatch" style="background:var(--other)"></span>기타 (직접 연결시)</div>
@@ -228,18 +236,30 @@
 </div>
 
 <div class="floatpanel" id="feedbackPanel">
-  <h3>💬 1:1 피드백 (질문 3개)</h3>
-  <div class="qa-group">
-    <label class="qa-label">1. 가장 유용했던 기능은 무엇인가요?</label>
-    <input type="text" id="q1" placeholder="예: 시각화 카드, AI 확장 등">
+  <h3>💬 피드백 남기기</h3>
+  <div class="fb-q">
+    <p class="fb-qtext">1. AI가 찾아준 연관 관계(경쟁·지분·납품)가 정확했나요?</p>
+    <div class="fb-opts" data-q="accuracy">
+      <button data-v="accurate">정확함</button>
+      <button data-v="mixed">보통</button>
+      <button data-v="inaccurate">부정확함</button>
+    </div>
   </div>
-  <div class="qa-group">
-    <label class="qa-label">2. 사용 중 불편하거나 개선할 점은?</label>
-    <input type="text" id="q2" placeholder="예: 카드 이동, 연결선 반응속도 등">
+  <div class="fb-q">
+    <p class="fb-qtext">2. 카드·연결선 형태가 종목 관계를 파악하는 데 도움이 됐나요?</p>
+    <div class="fb-opts" data-q="usefulness">
+      <button data-v="helpful">도움됨</button>
+      <button data-v="neutral">보통</button>
+      <button data-v="not_helpful">도움 안됨</button>
+    </div>
   </div>
-  <div class="qa-group">
-    <label class="qa-label">3. 추가되었으면 하는 기능이 있나요?</label>
-    <input type="text" id="q3" placeholder="예: 주가 알림, 더 많은 종목 데이터 등">
+  <div class="fb-q">
+    <p class="fb-qtext">3. 다음에도 이 서비스를 다시 사용하고 싶나요?</p>
+    <div class="fb-opts" data-q="retention">
+      <button data-v="yes">예</button>
+      <button data-v="maybe">글쎄요</button>
+      <button data-v="no">아니오</button>
+    </div>
   </div>
   <button id="fbSubmit">제출</button>
   <p class="fb-status" id="fbStatus"></p>
@@ -283,10 +303,10 @@ svg.setAttribute('height', BASE_H);
 
 const CARD_W = 224, CARD_H = 176;
 const RELATIONS = {
-  competitor: {label:'경쟁사', color:'#d6524f'},
+  competitor: {label:'경쟁 관계', color:'#d6524f'},
   partner:    {label:'지분 관계', color:'#4f9d6e'},
   supply:     {label:'납품 관계', color:'#5b8cd6'},
-  other:      {label:'기타',   color:'#8b8b93'},
+  other:      {label:'기타',     color:'#8b8b93'},
 };
 const MAIN_GAP = 300;
 const CROSS_GAP = { competitor:260, partner:200, supply:200 };
@@ -421,9 +441,6 @@ function createCard(data, x, y){
   el.className = 'card';
   el.dataset.id = id;
   el.style.left = x+'px'; el.style.top = y+'px';
-  
-  const reasonHtml = data.reason ? `<p class="reason" title="${data.reason}">🔗 ${data.reason}</p>` : '';
-
   el.innerHTML = `
     <div class="handle e"></div><div class="handle w"></div>
     <div class="card-header">
@@ -436,8 +453,8 @@ function createCard(data, x, y){
     </div>
     <div class="chart-wrap">${sparklineSVG(data.trend, isUp, 'g'+id)}</div>
     <div class="chart-cap">AI 추정 추세</div>
-    ${reasonHtml}
     <p class="news">${data.summary||''}</p>
+    <p class="reason">${data.reason ? '<span class="tag">🔗</span>' + data.reason : ''}</p>
   `;
   boardInner.appendChild(el);
 
@@ -593,7 +610,7 @@ function trackEvent(event, name){
   }).catch(() => {});
 }
 
-/* ---------------- AI calls (via serverless API) ---------------- */
+/* ---------------- AI calls (via our own serverless API — key never exposed to the browser) ---------------- */
 async function callApi(path, name){
   const res = await fetch(path, {
     method: "POST",
@@ -629,7 +646,7 @@ function placeDirectional(sourceCard, dirKey, items){
       let x = sourceCard.x, y = sourceCard.y;
       if(cfg.axis === 'y'){ y += cfg.sign*mainOffset; x += crossOffset; }
       else { x += cfg.sign*mainOffset; y += crossOffset; }
-      target = createCard({name:it.name, change:it.change, summary:it.news, reason:it.reason, trend:it.trend}, x, y);
+      target = createCard({name:it.name, change:it.change, reason:it.reason, trend:it.trend}, x, y);
     }
     if(!edgeExists(sourceCard.id, target.id)) createEdge(sourceCard.id, target.id, dirKey, 'dashed');
   });
@@ -671,8 +688,8 @@ async function expandWithAI(cardId, btnEl){
     const data = await fetchRelated(card.name);
     placeDirectional(card, 'competitor', data.competitors || []);
     placeDirectional(card, 'supply', data.supply || []);
-    placeDirectional(card, 'partner', data.partners || []);
-    const total = (data.competitors?.length||0) + (data.partners?.length||0) + (data.supply?.length||0);
+    placeDirectional(card, 'partner', data.equity || []);
+    const total = (data.competitors?.length||0) + (data.equity?.length||0) + (data.supply?.length||0);
     setStatus(card.name+' 기준 '+total+'개 연관주를 확장했습니다.');
     trackEvent('ai_expand', card.name);
   }catch(err){
@@ -721,23 +738,29 @@ async function loadStats(){
   }
 }
 
+const fbAnswers = { accuracy:null, usefulness:null, retention:null };
+document.querySelectorAll('.fb-opts').forEach(group => {
+  const qKey = group.dataset.q;
+  group.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fbAnswers[qKey] = btn.dataset.v;
+      group.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+});
 document.getElementById('fbSubmit').addEventListener('click', async () => {
-  const q1 = document.getElementById('q1').value.trim();
-  const q2 = document.getElementById('q2').value.trim();
-  const q3 = document.getElementById('q3').value.trim();
   const statusEl2 = document.getElementById('fbStatus');
-
-  if(!q1 && !q2 && !q3){ statusEl2.textContent = '최소 한 개 이상의 답변을 입력해주세요.'; return; }
+  if(!fbAnswers.accuracy || !fbAnswers.usefulness || !fbAnswers.retention){
+    statusEl2.textContent = '세 질문에 모두 답해주세요.';
+    return;
+  }
   statusEl2.textContent = '전송 중...';
   try{
     await fetch('/api/feedback', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ q1, q2, q3 })
+      body: JSON.stringify(fbAnswers)
     });
     statusEl2.textContent = '감사합니다! 피드백이 저장되었습니다.';
-    document.getElementById('q1').value = '';
-    document.getElementById('q2').value = '';
-    document.getElementById('q3').value = '';
   }catch(err){
     statusEl2.textContent = '전송 실패, 잠시 후 다시 시도해주세요.';
   }
